@@ -1,0 +1,40 @@
+name: CD
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  publish-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Log in to registry
+        uses: docker/login-action@v2
+        with:
+          registry: ${{ secrets.REGISTRY }}
+          username: ${{ secrets.REGISTRY_USER }}
+          password: ${{ secrets.REGISTRY_TOKEN }}
+
+      - name: Push backend image
+        run: docker push ${{ secrets.REGISTRY }}/neptune-ai-backend:${{ github.sha }}
+
+      - name: Push frontend image
+        run: docker push ${{ secrets.REGISTRY }}/neptune-ai-frontend:${{ github.sha }}
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'latest'
+
+      - name: Deploy with Helm
+        env:
+          KUBECONFIG: ${{ secrets.KUBECONFIG }}
+        run: |
+          helm upgrade neptune-ai charts/neptune-ai \
+            --install \
+            --namespace neptune \
+            --set backend.image.tag=${{ github.sha }} \
+            --set frontend.image.tag=${{ github.sha }} \
+            --wait
